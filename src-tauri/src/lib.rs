@@ -3,11 +3,23 @@ use reqwest::blocking::Client;
 use std::collections::HashMap;
 
 // Config — tu changes ces valeurs quand tout est prêt
-const LEGACY_AD: &str = "netnova-legacy.local";
-const DURCI_AD: &str = "netnova.local";
-const WAZUH_URL: &str = "https://wazuh-server:55500";
-const SLACK_BOT_TOKEN: &str = "xoxb-ton-token";
-const SLACK_CHANNEL: &str = "general";
+const LEGACY_AD: &str = "IP-DU-LEG-DC01";
+const LEGACY_DOMAIN: &str = "NETNOVA-LEGACY";        // NetBIOS name — ne pas modifier
+const LEGACY_USER: &str = "Administrator";            // Compte admin legacy — ne pas modifier
+const LEGACY_PASSWORD: &str = "MOT-DE-PASSE-LEGACY"; 
+
+// Active Directory Durci (ad.netnova.fr)
+const DURCI_AD: &str = "IP-DU-DURCI";
+const DURCI_DOMAIN: &str = "ad.netnova.fr";
+const DURCI_USER: &str = "hugo";                     // Compte standard non privilégié — ne pas modifier
+const DURCI_PASSWORD: &str = "MOT-DE-PASSE-DURCI";  
+
+// Wazuh
+const WAZUH_URL: &str = "https://wazuh-server:55500/";  
+
+// Slack
+const SLACK_BOT_TOKEN: &str = "xoxb-...";           // Bot token Slack (commence par xoxb-)
+const SLACK_CHANNEL: &str = "general";               // Channel Slack cible
 
 // Scénario 1 — comportement normal (1 message — aucune alerte Wazuh)
 #[tauri::command]
@@ -54,7 +66,6 @@ fn scenario_bourrin() -> Vec<String> {
 
     let mut logs = vec![];
 
-    // Rejoindre 25 channels en masse
     for i in 1..=25 {
         let mut body = HashMap::new();
         let channel = format!("C_DEMO_{:03}", i);
@@ -93,7 +104,6 @@ fn scenario_3() -> Vec<String> {
 
     let mut logs = vec![];
 
-    // Partager 25 fichiers
     for i in 1..=25 {
         let mut body = HashMap::new();
         body.insert("channels", SLACK_CHANNEL);
@@ -119,7 +129,6 @@ fn scenario_3() -> Vec<String> {
         }
     }
 
-    // Rendre 6 fichiers publics
     for i in 1..=6 {
         let mut body = HashMap::new();
         let file_id = format!("F_PUB_{:03}", i);
@@ -151,7 +160,11 @@ fn scenario_3() -> Vec<String> {
 // Lancement pentest AD
 #[tauri::command]
 fn run_pentest(target: &str, attack: &str) -> Vec<String> {
-    let host = if target == "legacy" { LEGACY_AD } else { DURCI_AD };
+    let (host, domain, user, password) = if target == "legacy" {
+        (LEGACY_AD, LEGACY_DOMAIN, LEGACY_USER, LEGACY_PASSWORD)
+    } else {
+        (DURCI_AD, DURCI_DOMAIN, DURCI_USER, DURCI_PASSWORD)
+    };
 
     let script = match attack {
         "kerberoasting" => "kerberoasting.sh",
@@ -165,6 +178,9 @@ fn run_pentest(target: &str, attack: &str) -> Vec<String> {
     let output = Command::new("bash")
         .arg(&script_path)
         .arg(host)
+        .arg(domain)
+        .arg(user)
+        .arg(password)
         .output();
 
     match output {
