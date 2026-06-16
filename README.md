@@ -9,6 +9,8 @@ Application desktop de simulation de pentest et de détection de comportements s
 - Tailwind CSS v4
 - React Router DOM
 - reqwest (appels HTTP Rust)
+---
+ 
 ## Prérequis
  
 **Node.js** (v18+) — https://nodejs.org/
@@ -23,6 +25,13 @@ curl -fsSL https://bun.sh/install | bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
  
+**impacket** (pour les scripts pentest AD) :
+```bash
+pip install impacket --break-system-packages
+```
+ 
+---
+ 
 ## Installation
  
 ```bash
@@ -31,17 +40,34 @@ cd netnova-pentest
 bun install
 ```
  
+---
+ 
 ## Configuration
  
-Ouvre `src-tauri/src/lib.rs` et remplace les 5 constantes en haut du fichier :
+Ouvre `src-tauri/src/lib.rs` et remplace les constantes en haut du fichier :
  
 ```rust
-const LEGACY_AD: &str = "IP-de-netnova-legacy.local";
-const DURCI_AD: &str = "IP-de-netnova.local";
-const WAZUH_URL: &str = "https://IP-wazuh:55500";
-const SLACK_BOT_TOKEN: &str = "xoxb-ton-token";
-const SLACK_CHANNEL: &str = "general";
+// Active Directory Legacy 
+const LEGACY_AD: &str = "IP-DU-LEGACY";
+const LEGACY_DOMAIN: &str = "NETNOVA-LEGACY";
+const LEGACY_USER: &str = "Administrator";
+const LEGACY_PASSWORD: &str = "MOT-DE-PASSE-LEGACY"; 
+ 
+// Active Directory Durci (ad.netnova.fr)
+const DURCI_AD: &str = "IP-DU-DURCI";
+const DURCI_DOMAIN: &str = "";
+const DURCI_USER: &str = "hugo";
+const DURCI_PASSWORD: &str = "MOT-DE-PASSE-DURCI"; 
+ 
+// Wazuh
+const WAZUH_URL: &str = "https://wazuh-server:55500/";
+ 
+// Slack
+const SLACK_BOT_TOKEN: &str = "xoxb-...";           // Bot token Slack (commence par xoxb-)
+const SLACK_CHANNEL: &str = "general";               // Channel Slack cible
 ```
+ 
+---
  
 ## Lancer l'app
  
@@ -74,9 +100,9 @@ src-tauri/
   src/
     lib.rs                — Backend Rust — appels API Slack/Wazuh + scripts bash
   scripts/
-    kerberoasting.sh      — Script bash Kerberoasting
-    pass-the-hash.sh      — Script bash Pass-the-Hash
-    enumeration-ldap.sh   — Script bash Énumération LDAP
+    kerberoasting.sh      — Kerberoasting via impacket-GetUserSPNs
+    pass-the-hash.sh      — Pass-the-Hash via impacket-secretsdump + impacket-smbclient
+    enumeration-ldap.sh   — Énumération LDAP via impacket-GetADUsers + impacket-lookupsid
 ```
  
 ---
@@ -95,13 +121,13 @@ src-tauri/
  
 ### Page 2 — Pentest Active Directory
  
-3 scripts bash lancés depuis l'UI sur les 2 AD :
+3 attaques réelles via impacket sur les 2 AD :
  
-| Attaque | Description |
-|---|---|
-| Kerberoasting | Demande des tickets TGS pour cracker des comptes de service |
-| Pass-the-Hash | Réutilisation de hash NTLM pour s'authentifier sans mot de passe |
-| Énumération LDAP | Requêtes LDAP massives pour mapper la structure AD |
+| Attaque | Outil | Legacy | Durci |
+|---|---|---|---|
+| Kerberoasting | impacket-GetUserSPNs | ✅ Fonctionne (svc_backup en DA) | ❌ Bloqué |
+| Pass-the-Hash | impacket-secretsdump + smbclient | ✅ Fonctionne | ❌ Bloqué (GPO Deny-Logon) |
+| Énumération LDAP | impacket-GetADUsers + lookupsid | ✅ Structure plate visible | ❌ Limité (tiering T0/T1) |
  
 ### Page 3 — Rapport comparatif
  
@@ -109,9 +135,23 @@ Récupère les alertes depuis l'API Wazuh et affiche le comparatif legacy vs dur
  
 ---
  
+## Contexte des 2 Active Directory
+ 
+| | netnova-legacy (LEG-DC01) | netnova durci (ad.netnova.fr) |
+|---|---|---|
+| Tiering | ❌ Aucun | ✅ T0/T1 |
+| Domain Admins | Surpeuplé + svc_backup | 1 seul compte |
+| Mot de passe | Politique faible | 14 car., expiration 90j |
+| LAPS | ❌ | ✅ |
+| Pass-the-Hash | ✅ Possible | ❌ Bloqué par GPO |
+| Audit | ❌ Pas de stratégie | ✅ Avancée |
+ 
+---
+ 
 ## Flux complet
  
 ```
-UI Tauri → scénarios Slack (API Slack) → Wazuh détecte → Rapport
-UI Tauri → scripts bash (AD legacy / durci) → Wazuh détecte → Rapport
+UI Tauri → scénarios Slack (API Slack) → connecteur Wazuh-Slack → Wazuh détecte → Rapport
+UI Tauri → scripts bash impacket (AD legacy / durci) → Wazuh détecte → Rapport
 ```
+ 
